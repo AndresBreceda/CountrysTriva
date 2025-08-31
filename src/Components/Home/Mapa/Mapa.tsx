@@ -1,104 +1,79 @@
-import { useState, useEffect } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  GeoJSON,
-} from "react-leaflet";
-import type { Feature, FeatureCollection, GeoJsonObject } from "geojson";
-import L, { type PathOptions } from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useMemo, useState } from "react";
+import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 
-const Mapa = () => {
-  const [geoData, setGeoData] = useState<FeatureCollection | null>(null);
-  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+// GeoJSON con nombres en props.ADMIN (Natural Earth)
+const geoUrl =
+  "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
 
-  useEffect(() => {
-    fetch("https://raw.githubusercontent.com/deldersveld/topojson/master/world-countries.json")
-      .then((res) => res.json())
-      .then((data: GeoJsonObject) => {
-        if (data.type === "FeatureCollection") {
-          setGeoData(data as FeatureCollection);
-        }
-      });
-  }, []);
+// Ajusta la lista a cómo vienen los nombres en el dataset (props.ADMIN)
+const VALID_COUNTRIES = [
+  "Mexico",
+  "Brazil",
+  "Argentina",
+  "Spain",
+  "United States of America",
+];
 
-  // ✅ Evento para cada país
-  const onEachCountry = (feature: Feature, layer: L.Layer) => {
-    if (feature.properties && "NAME" in feature.properties) {
-      const countryName = feature.properties["NAME"];
+type AnyProps = Record<string, any>;
 
-      layer.on({
-        mouseover: (e) => {
-          const target = e.target;
-          target.setStyle({
-            fillColor: "#f03",
-            fillOpacity: 0.7,
-          } as PathOptions);
+const getCountryName = (props: AnyProps) =>
+  props?.ADMIN || props?.name || props?.NAME || props?.NAME_LONG || props?.SOVEREIGNT || "";
 
-          setHoveredCountry(countryName);
-        },
-        mouseout: (e) => {
-          const target = e.target;
-          target.setStyle({
-            fillColor: "#3388ff",
-            fillOpacity: 0.5,
-          } as PathOptions);
+export default function MapaMundo() {
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
-          setHoveredCountry(null);
-        },
-        click: () => {
-          setSelectedCountry(countryName);
-          alert("Seleccionaste: " + countryName);
-        },
-      });
-
-      // Cambiar el cursor a pointer
-      layer.getElement()?.setAttribute("style", "cursor: pointer");
-    }
-  };
-
-  // ✅ Estilo base de todos los países
-  const geoJSONStyle: PathOptions = {
-    color: "#000",         // Borde
-    weight: 1,
-    fillColor: "#3388ff",  // Color de fondo
-    fillOpacity: 0.5,
-  };
+  const validSet = useMemo(() => new Set(VALID_COUNTRIES), []);
 
   return (
     <div>
-      <MapContainer
-        center={[20, 0] as [number, number]}
-        zoom={2}
-        style={{ height: "600px", width: "100%" }}
-        zoomControl={false}
-        dragging={false}
-        doubleClickZoom={false}
-        scrollWheelZoom={false}
-        boxZoom={false}
-        keyboard={false}
-        touchZoom={false}
-      >
-        <TileLayer
-          attribution='&copy; OpenStreetMap'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        {geoData && (
-          <GeoJSON
-            data={geoData}
-            style={geoJSONStyle}
-            onEachFeature={onEachCountry}
-          />
-        )}
-      </MapContainer>
+      <ComposableMap projectionConfig={{ scale: 145 }}>
+        <Geographies geography={geoUrl}>
+          {({ geographies }) =>
+            geographies.map((geo) => {
+              const name = getCountryName(geo.properties);
+              const isValid = validSet.has(name);
+              const isSelected = selected === name;
 
-      <div style={{ marginTop: "10px" }}>
-        {hoveredCountry && <p><strong>Estás sobre:</strong> {hoveredCountry}</p>}
-        {selectedCountry && <p><strong>Seleccionaste:</strong> {selectedCountry}</p>}
+              // Colores base
+              const baseFill = isSelected ? "#3b82f6" : isValid ? "#22c55e" : "#e5e7eb";
+
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  onMouseEnter={() => isValid && setHovered(name)}
+                  onMouseLeave={() => isValid && setHovered(null)}
+                  onClick={() => isValid && setSelected(name)}
+                  style={{
+                    default: {
+                      outline: "none",
+                      stroke: "#111",
+                      strokeWidth: 0.5,
+                      fill: baseFill,
+                      cursor: isValid ? "pointer" : "default",
+                      pointerEvents: isValid ? "auto" : "none",
+                    },
+                    hover: {
+                      outline: "none",
+                      fill: isValid ? "#ef4444" : baseFill,
+                    },
+                    pressed: {
+                      outline: "none",
+                      fill: isValid ? "#3b82f6" : baseFill,
+                    },
+                  }}
+                />
+              );
+            })
+          }
+        </Geographies>
+      </ComposableMap>
+
+      <div style={{ marginTop: 8 }}>
+        {hovered && <p><strong>Estás sobre:</strong> {hovered}</p>}
+        {selected && <p><strong>Seleccionaste:</strong> {selected}</p>}
       </div>
     </div>
   );
-};
-
-export default Mapa;
+}
